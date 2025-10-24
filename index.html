@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cronômetro Live - 15:30</title>
+  <!-- Fonte Bangers -->
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet">
+  <style>
+    /* Fundo transparente e reset */
+    html,body{height:100%;margin:0;background:transparent}
+    /* Container centralizado */
+    .wrap{height:100%;display:flex;align-items:center;justify-content:center}
+
+    /* Estilo do timer (fonte Bangers) */
+    .timer{
+      font-family:'Bangers', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      font-size: clamp(48px, 15vw, 220px);
+      line-height:1;
+      letter-spacing:0.02em;
+      color: white; /* preenchimento branco */
+      -webkit-text-stroke: 4px black; /* borda preta nas letras (WebKit) */
+      text-shadow:
+        0 1px 0 #000, /* fallback para borda */
+        1px 0 0 #000,
+        -1px 0 0 #000,
+        0 -1px 0 #000,
+        1px 1px 0 #000,
+        -1px -1px 0 #000;
+      user-select:none;
+      -webkit-user-select:none;
+      text-align:center;
+      padding:6px;
+      background:transparent;
+    }
+
+    /* Frase final com animação sutil */
+    .finished{animation:pop 700ms ease both}
+    @keyframes pop{0%{transform:scale(.95);opacity:0}50%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}
+
+    /* Pequeno helper (invisível por padrão) para testes locais */
+    .controls{position:fixed;bottom:6px;left:6px;font-family:system-ui;font-size:12px;color:#fff;opacity:0.6}
+    .hint{font-size:12px;opacity:0.7}
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="timer" class="timer" aria-live="polite">15:30</div>
+  </div>
+
+  <!-- Controles invisíveis (úteis em debug). No Moblin você pode ignorar/ocultar) -->
+  <div class="controls" id="controls">
+    <div class="hint">Toque no texto para iniciar / pausar. A visibilidade do widget (ativar/desativar no Moblin) também controla o início.</div>
+  </div>
+
+  <script>
+    (function(){
+      // Tempo inicial em segundos: 15 minutos e 30 segundos = 930s
+      const INITIAL_SECONDS = 15*60 + 30; // 930
+      let remaining = INITIAL_SECONDS;
+      let running = false;
+      let finished = false;
+      let lastTick = null; // timestamp para manter precisão quando visibilidade muda
+      const display = document.getElementById('timer');
+      const controls = document.getElementById('controls');
+
+      function formatTime(s){
+        // s é inteiro de segundos
+        const mm = Math.floor(s/60).toString().padStart(2,'0');
+        const ss = Math.floor(s%60).toString().padStart(2,'0');
+        return mm + ':' + ss;
+      }
+
+      function updateDisplay(){
+        if(remaining <= 0){
+          finished = true;
+          running = false;
+          display.textContent = 'A Live vai começar agora!';
+          display.classList.add('finished');
+          return;
+        }
+        display.textContent = formatTime(remaining);
+      }
+
+      function tick(now){
+        if(!running || finished) return;
+        if(!lastTick) lastTick = now;
+        const elapsedMs = now - lastTick;
+        if(elapsedMs >= 250){ // atualizar a cada 250ms para economia e precisão
+          const elapsedSec = Math.floor(elapsedMs/1000);
+          // Subtrai segundos inteiros que passaram
+          if(elapsedSec >= 1){
+            remaining = Math.max(0, remaining - elapsedSec);
+            lastTick = now;
+            updateDisplay();
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+
+      function start(){
+        if(finished) return;
+        if(!running){
+          running = true;
+          lastTick = performance.now();
+          requestAnimationFrame(tick);
+        }
+      }
+      function pause(){
+        running = false;
+        lastTick = null;
+      }
+
+      // Alterna start/pause quando o usuário toca no timer (útil para testes locais)
+      display.addEventListener('click', function(){
+        if(finished) return;
+        if(running) pause(); else start();
+      });
+
+      // Controla início/pausa automaticamente com base na visibilidade do documento.
+      // No Moblin iOS: ativar/mostrar o widget -> document.visibilityState = 'visible' -> iniciará.
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState === 'visible'){
+          // Ao voltar à visibilidade, reinicia o mecanismo de tempo sem pular muito: usa timestamp atual
+          start();
+        } else {
+          // Ao ocultar (widget desativado no Moblin), pausa a contagem
+          pause();
+        }
+      });
+
+      // Atualiza a exibição inicial
+      updateDisplay();
+
+      // Se o widget já estiver visível quando a página carrega, inicia automaticamente
+      if(document.visibilityState === 'visible'){
+        // Não iniciar imediatamente — aguarda 350ms para garantir que Moblin já estabilizou a renderização
+        setTimeout(start, 350);
+      }
+
+      // Funções auxiliares (para desenvolvedores): possibilita reset via console
+      window.__cronometroLive = {
+        reset: function(){ remaining = INITIAL_SECONDS; finished = false; display.classList.remove('finished'); updateDisplay(); },
+        start: start,
+        pause: pause,
+        status: function(){ return {remaining, running, finished}; }
+      };
+
+    })();
+  </script>
+</body>
+</html>
